@@ -45,3 +45,10 @@ build/
 
 ### Scala ###
 .bsp/
+
+### IntelliJ ###
+.idea/
+
+### Metals ###
+.bloop/
+.metals/
