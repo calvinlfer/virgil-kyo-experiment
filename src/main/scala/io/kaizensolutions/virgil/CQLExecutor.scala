@@ -9,10 +9,9 @@ import com.datastax.oss.driver.api.core.metrics.Metrics
 import io.kaizensolutions.virgil.internal.*
 import io.kaizensolutions.virgil.configuration.*
 import io.kaizensolutions.virgil.internal.Proofs.*
-import io.kaizensolutions.virgil.Experiment.channel
 
 final class CQLExecutor(private val session: CqlSession):
-  def execute[A: Flat](in: CQL[A]): Stream[Unit, A, Fibers] =
+  def execute[A: Flat](in: CQL[A])(using Tag[A]): Stream[Unit, A, Fibers] =
     in.cqlType match
       case m: CQLType.Mutation =>
         val mutation: A < Fibers            = executeMutation(m, in.executionAttributes).asInstanceOf[A < Fibers]
@@ -79,7 +78,7 @@ final class CQLExecutor(private val session: CqlSession):
   def executeGeneralQuery[Output: Flat](
     input: CQLType.Query[Output],
     config: ExecutionAttributes
-  ): Stream[Unit, Output, Fibers] =
+  )(using Tag[Output]): Stream[Unit, Output, Fibers] =
     val (queryString, bindMarkers) = CqlStatementRenderer.render(input)
     val reader                     = input.reader
     val statement                  = buildStatement(queryString, bindMarkers, config)

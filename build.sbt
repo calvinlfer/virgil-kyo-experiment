@@ -5,7 +5,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "virgil-kyo",
     libraryDependencies ++= Seq(
-      "io.getkyo"           %% "kyo-core"    % "0.0.0+1599-b0cbf0b9-SNAPSHOT",
+      "io.getkyo"           %% "kyo-core"    % "0.9.3+68-6ae20bb0-SNAPSHOT",
+      "io.getkyo"           %% "kyo-direct"  % "0.9.3+68-6ae20bb0-SNAPSHOT",
       "io.kaizen-solutions" %% "virgil-core" % "1.0.5"
     )
   )
