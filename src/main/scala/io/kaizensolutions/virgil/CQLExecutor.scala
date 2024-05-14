@@ -41,7 +41,7 @@ final class CQLExecutor(private val session: CqlSession):
     case CQLType.Query(_, _, _) =>
       sys.error("Cannot perform a query using executeMutation")
 
-  def executePage[A](in: CQL[A], pageState: Option[PageState])(implicit
+  def executePage[A](in: CQL[A], pageState: Option[PageState])(using
     ev: A =:!= MutationResult
   ): Paged[A] < Fibers = in.cqlType match
     case _: CQLType.Mutation =>
@@ -75,7 +75,7 @@ final class CQLExecutor(private val session: CqlSession):
       .map(executeAction)
       .map(r => MutationResult.make(r.wasApplied()))
 
-  def executeGeneralQuery[Output: Flat](
+  private def executeGeneralQuery[Output: Flat](
     input: CQLType.Query[Output],
     config: ExecutionAttributes
   )(using Tag[Output]): Stream[Unit, Output, Fibers] =
@@ -96,9 +96,7 @@ final class CQLExecutor(private val session: CqlSession):
         Streams.emitChunk(chunk).map(_ => next)
       else next
 
-    Streams
-      .initSource(Fibers.fromCompletionStage(session.executeAsync(query)).map(go))
-      .buffer(1024)
+    Streams.initSource(Fibers.fromCompletionStage(session.executeAsync(query)).map(go))
 
   private def fetchSinglePage[A](
     q: CQLType.Query[A],
@@ -157,12 +155,29 @@ final class CQLExecutor(private val session: CqlSession):
     Fibers.fromCompletionStage(session.executeAsync(query))
 
 object CQLExecutor:
-  def fiber(sessionBuilder: => CqlSessionBuilder): CQLExecutor < Fibers =
-    Fibers
-      .fromCompletionStage(sessionBuilder.buildAsync())
-      .map(new CQLExecutor(_))
+  def resource(sessionBuilder: => CqlSessionBuilder): CQLExecutor < Resources =
+    val acquire: CqlSession < Fibers         = Fibers.fromCompletionStage(sessionBuilder.buildAsync())
+    val release: CqlSession => Unit < Fibers = (session: CqlSession) => Fibers.fromCompletionStage(session.closeAsync()).unit
 
-  def resource(sessionBuilder: CqlSessionBuilder): CQLExecutor < Resources =
-    val acquire = IOs(sessionBuilder.build())
-    val release = (session: CqlSession) => IOs(session.close())
     Resources.acquireRelease(acquire)(release).map(new CQLExecutor(_))
+
+  def execute[A: Flat](in: CQL[A])(using Tag[A]): Stream[Unit, A, Envs[CQLExecutor] & Fibers] =
+    Streams.initSource:
+      Envs
+        .get[CQLExecutor]
+        .map(executor => executor.execute(in).get)
+
+  def executeMutation(in: CQL[MutationResult]): MutationResult < (Envs[CQLExecutor] & Fibers) =
+    Envs
+      .get[CQLExecutor]
+      .map(executor => executor.executeMutation(in))
+
+  def executePage[A](in: CQL[A], pageState: Option[PageState] = None)(using A =:!= MutationResult) =
+    Envs
+      .get[CQLExecutor]
+      .map(executor => executor.executePage(in, pageState))
+
+  val metrics: Metrics < (Envs[CQLExecutor] & Options) =
+    Envs
+      .get[CQLExecutor]
+      .map(_.metrics)
